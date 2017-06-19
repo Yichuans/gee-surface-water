@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>WH and water</title>
+    <meta charset="utf-8">
+    <!-- Support for browsers on mobile phones. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!-- Google Web Fonts. -->
+    <link href='https://fonts.googleapis.com/css?family=Roboto+Condensed' rel='stylesheet' type='text/css'>
+    <!-- Custom CSS styles for our application. -->
+    <link rel="stylesheet" href="/static/style.css">
+    <!-- The Google JavaScript loader tool (for the Maps, Charts APIs). -->
+    <script src="https://www.google.com/jsapi"></script>
+    <!-- Our custom JavaScript for Trendy Lights. -->
+    <!-- <script src="/static/script.js"></script> -->
+    <style type="text/css">
+    /*        .map .panel {
+            height: 50%;
+        }
+        .panel {
+            display: block;
+        }*/
+    </style>
+</head>
+
+<body>
+    <!-- The DOM of our application. -->
+    <div class="trendy">
+        <!-- The title of the application. -->
+        <h1>Surface Water Change</h1>
+        <!-- A container which the Maps API will populate with a map. -->
+        <div class="map"></div>
+        <!-- The panel to show details about a place. -->
+        <div class="panel">
+            <!-- The button to toggle the panel expanded/collapsed. Mobile-only. -->
+            <!-- The title of the place for which details are being shown. -->
+            <h2 class='name'></h2>
+            <h2 class="title"></h2>
+            <!-- A scrollable container for details about the polygon. -->
+            <div class="details">
+                <!-- A container which the Charts API will populate. -->
+                <div class="chart"></div>
+                <!-- The link to the polygon's Wikipedia page. -->
+            </div>
+        </div>
+        <a href="https://earthengine.google.org">
+            <img class="powered-by-ee" alt="Powered by Google Earth Engine" src="/static/google_earthengine_powered_400px.png">
+        </a>
+    </div>
+    <!-- Boot our JavaScript once the body has loaded. -->
+    <script>
+    google.load('jquery', '1');
+    google.load('maps', '3', {
+        other_params: 'key=AIzaSyAoPESUfucBZeZoWB6bEG16k47ci-sZ4l0'
+    });
+
+    google.load("visualization", "1", {
+        packages: ["corechart"]
+    });
+
+    // google.setOnLoadCallback(drawChart);
+
+    // Set a callback to run when the Google Visualization API is loaded.
+
+    // Callback that creates and populates a data table,
+    // instantiates the pie chart, passes in the data and
+    // draws it.
+    function putName(){
+        $.get('/getfeature?wdpaid={{wdpaid}}', function(raw_data){
+            a=raw_data;
+            $('.panel .name').text(raw_data.properties.name);
+        })
+    }
+
+    function drawChart() {
+
+        $.get('/details?wdpaid={{wdpaid}}', function(raw_data) {
+            // Create the data table.
+            // a = raw_data;
+            var data = new google.visualization.DataTable();
+            data.addColumn('string', 'Transition value');
+            data.addColumn('number', 'Square km');
+            data.addRows(raw_data.map(function(item) {
+                return [item[0], item[1]]
+            }));
+
+            // Set chart options
+            var options = {
+                'title': 'Surface water transition (in km2)',
+                'width': 400,
+                'height': 400,
+                'slices': raw_data.map(function(item){
+                    return {'color':item[2]}
+                })
+
+            };
+
+            // Instantiate and draw our chart, passing in some options.
+            var chart = new google.visualization.PieChart($('.details .chart').get(0));
+            chart.draw(data, options);
+        })
+
+    }
+
+    google.setOnLoadCallback(function() {
+        drawChart();
+        putName();
+
+        var eeMapId = '{{ eeMapId | safe }}';
+        var eeToken = '{{ eeToken | safe }}';
+        var mapEl = $('.map').get(0);
+
+        var mapOptions = {
+            backgroundColor: '#000000',
+            center: {
+                lng: 5,
+                lat: 50
+            },
+            disableDefaultUI: false,
+            zoom: 4
+        };
+
+        var eeMapOptions = {
+            getTileUrl: function(tile, zoom) {
+                var url = 'https://earthengine.googleapis.com' + '/map/';
+                url += [eeMapId, zoom, tile.x, tile.y].join('/');
+                url += '?token=' + eeToken;
+                return url;
+            },
+
+            tileSize: new google.maps.Size(256, 256)
+        };
+        var mapType = new google.maps.ImageMapType(eeMapOptions);
+
+        var map = new google.maps.Map(mapEl, mapOptions);
+        // map.data.addGeoJson('http://localhost:8080/getfeature?wdpaid=191');
+
+        $.get("/getfeature?wdpaid={{wdpaid}}", function(raw_data) {
+
+            gdata = new google.maps.Data();
+
+            feature = gdata.addGeoJson(raw_data)[0];
+
+            // map.data.addGeoJson(data);
+            if (feature.getGeometry().getType() === 'Polygon') {
+
+                //initialize the bounds
+                var bounds = new google.maps.LatLngBounds();
+
+                //iterate over the paths
+                feature.getGeometry().getArray().forEach(function(path) {
+
+                    //iterate over the points in the path
+                    path.getArray().forEach(function(latLng) {
+                        //extend the bounds
+                        bounds.extend(latLng);
+                    });
+
+                    map.fitBounds(bounds, 20);
+                });
+
+            };
+
+            map.overlayMapTypes.push(mapType);
+            map.data.addGeoJson(raw_data);
+
+        });
+    })
+    </script>
+</body>
+
+</html>
